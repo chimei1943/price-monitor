@@ -1,58 +1,63 @@
-<?php
-// 取得網址參數
-$shopid = $_GET['shopid'] ?? '';
-$itemid = $_GET['itemid'] ?? '';
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>輸入商品網址並設定監控</title>
+</head>
+<body>
+  <h2>🛒 設定商品價格監控</h2>
 
-if (!$shopid || !$itemid) {
-    echo "請提供正確的 shopid 與 itemid";
-    exit;
-}
+  <?php
+  $shopid = '';
+  $itemid = '';
+  $error = '';
 
-// 呼叫蝦皮 API
-$url = "https://shopee.tw/api/v4/item/get?itemid={$itemid}&shopid={$shopid}";
-$ch = curl_init($url);
+  if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['shopee_url'])) {
+      $url = $_POST['shopee_url'] ?? '';
 
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_HTTPHEADER, [
-    'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-    'Referer: https://shopee.tw/'
-]);
+      // 嘗試解析網址中 .i.shopid.itemid 結構
+      if (preg_match('/\.i\.(\d+)\.(\d+)/', $url, $matches)) {
+          $shopid = $matches[1];
+          $itemid = $matches[2];
+      } elseif (preg_match('/\/product\/(\d+)\/(\d+)/', $url, $matches)) {
+          $shopid = $matches[1];
+          $itemid = $matches[2];
+      } else {
+          $error = "❌ 無法從網址解析出 shopid 與 itemid。請確認網址格式正確。";
+      }
+  }
+  ?>
 
-$response = curl_exec($ch);
-curl_close($ch);
+  <form method="POST">
+    <label>貼上蝦皮商品網址：</label><br>
+    <input type="text" name="shopee_url" style="width:400px" required
+           value="<?= htmlspecialchars($_POST['shopee_url'] ?? '') ?>"><br><br>
+    <button type="submit">解析網址 ➜ 輸入商品選項</button>
+  </form>
 
-// ❗ debug 用：印出原始回應（成功後可註解掉）
-echo "<pre style='background:#eee;padding:1em;border:1px solid #ccc;'>原始回應（除錯用）：\n";
-print_r($response);
-echo "</pre>";
+  <hr>
 
-$data = json_decode($response, true);
+  <?php if ($shopid && $itemid): ?>
+    <form method="POST" action="save_selection.php">
+      <input type="hidden" name="shopid" value="<?= $shopid ?>">
+      <input type="hidden" name="product_id" value="<?= $itemid ?>">
 
-// 檢查是否成功抓到 models
-if (!isset($data['data']['models']) || empty($data['data']['models'])) {
-    echo "<p style='color:red;'>❌ 抓不到商品選項，可能原因：</p>";
-    echo "<ul>
-            <li>1. 商品已下架或ID錯誤</li>
-            <li>2. 蝦皮API阻擋（限制IP、要求登入）</li>
-            <li>3. 回傳格式已改變</li>
-          </ul>";
-    exit;
-}
+      <label>商品名稱（可自訂）：</label><br>
+      <input type="text" name="product_name" required><br><br>
 
-// 顯示選項
-$models = $data['data']['models'];
+      <label>選項名稱（例：#01 白皙色）</label><br>
+      <input type="text" name="option_name" required><br><br>
 
-echo "<h2>選擇你要監控的規格：</h2>";
-echo "<form action='save_selection.php' method='POST'>";
-echo "<input type='hidden' name='product_id' value='{$itemid}'>";
+      <label>模型 ID（可選填）：</label><br>
+      <input type="text" name="model_id"><br><br>
 
-foreach ($models as $m) {
-    $name = htmlspecialchars($m['name']);
-    $price = $m['price'] / 100000; // 轉換為 NT$
-    $model_id = $m['model_id'];
-    echo "<label><input type='radio' name='model_id' value='{$model_id}'> {$name} - NT\${$price}</label><br>";
-}
+      <label>目標價格（可選填）：</label><br>
+      <input type="number" name="target_price"><br><br>
 
-echo "<button type='submit'>開始監控</button>";
-echo "</form>";
-?>
+      <button type="submit">✅ 加入監控清單</button>
+    </form>
+  <?php elseif ($error): ?>
+    <p style="color:red"><?= $error ?></p>
+  <?php endif; ?>
+</body>
+</html>
